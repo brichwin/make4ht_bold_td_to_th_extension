@@ -1,0 +1,77 @@
+-- bold_td_to_th.mk4
+-- make4ht extention to convert \textbf{cell value} to <TH> cells
+local domfilter = require "make4ht-domfilter"
+
+local function is_cell_bold(cell)
+  -- Get the text content and child nodes
+  local text_content = cell:get_text():gsub("^%s*(.-)%s*$", "%1") -- trim whitespace
+  
+  -- If cell is empty or whitespace only, not bold
+  if text_content == "" then
+    return false
+  end
+  
+  -- Look for bold spans (make4ht typically uses ec-lmbx-* classes for bold)
+  local bold_spans = cell:query_selector("span[class*='lmbx']")
+  
+  if #bold_spans == 0 then
+    return false
+  end
+  
+  -- Check if ALL non-whitespace content is in bold spans
+  local bold_text = ""
+  for _, span in ipairs(bold_spans) do
+    bold_text = bold_text .. span:get_text()
+  end
+  
+  -- Trim both for comparison
+  bold_text = bold_text:gsub("^%s*(.-)%s*$", "%1")
+  
+  -- If the bold text matches the cell text, the cell is bold
+  return bold_text == text_content
+end
+
+local function td_to_th(cell, scope)
+  -- Change element name from td to th
+  cell._name = "th"
+  
+  -- Add scope attribute
+  if scope then
+    cell:set_attribute("scope", scope)
+  end
+end
+
+local process = domfilter {
+  function(dom)
+    -- Process all tables
+    for _, tbl in ipairs(dom:query_selector("table")) do
+      local rows = tbl:query_selector("tr")
+      
+      for row_idx, row in ipairs(rows) do
+        local cells = row:query_selector("td")
+        
+        for col_idx, cell in ipairs(cells) do
+          -- Only process cells in first row OR first column
+          if row_idx == 1 or col_idx == 1 then
+            -- Check if this cell is bold
+            if is_cell_bold(cell) then
+              -- Convert to th with appropriate scope
+              local scope = nil
+              if row_idx == 1 then
+                scope = "col"
+              elseif col_idx == 1 then
+                scope = "row"
+              end
+              
+              td_to_th(cell, scope)
+            end
+          end
+        end
+      end
+    end
+    
+    return dom
+  end
+}
+
+Make:match("html$", process)
